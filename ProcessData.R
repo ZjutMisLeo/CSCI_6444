@@ -1,58 +1,112 @@
 library(igraph)
-filePath = "C:/Users/L/Desktop/Big Data/Project1/Circles"
-FeaturesPath = "C:/Users/L/Desktop/Big Data/Project1/Features"
-FeaturesPath = "C:/Users/L/Desktop/Big Data/Project1/FeatureNames"
-
+filePath = "/Users/leo/Desktop/big data/Project1/Features"
+circlePath = "/Users/leo/Desktop/big data/Project1/Circles"
 files = list.files(path = filePath, full.names = T, recursive = T)
+circles = list.files(path = circlePath, full.names = T, recursive = T)
 #create a datafram to store edges
 relations = data.frame() 
-#ccreate a list to store name                             
-name = data.frame()
-nameList = as.list(name)          
+#ccreate a list to store name of each file                           
+nameList = as.list(data.frame())          
+vertices = as.list(data.frame())  
+
 for (path in files){
-	g = scan(path)
-	if (!inherits(g, 'try-error')) g                       # I am not sure scan() will catch blank here.
-	gList = as.list(g)
-	circleSeq = scan(path, what = 'list', flush = T)       # the number of circle in each file, dont know how to process
-    name = gsub("C:/Users/L/Desktop/Big Data/Project1/Circles/", "", path)
-    name = as.numeric(gsub(".circles", "", name))
-    nameList = c(nameList, name)                               # get the name of file and input into list
-	if (length(gList) != 0) {                              # skip the empty file, we already have all nodes in nameList
-		for (temp in gList){                               # use this for loop to get edges of the node
-			if (temp > 100) {
-				test = data.frame(from = name, to = temp)
-				nameList = c(nameList, temp)
-		        relations = rbind(relations, test)
-		    }
-		}
-	#}
+	#get the first column of node
+    subNode = as.list(scan(path, what = 'list', flush = T))
+    name = gsub("/Users/leo/Desktop/big data/Project1/Features/", "", path)
+    name = as.numeric(gsub(".feat", "", name))
+    nameList = c(nameList, name)
+    for(node in subNode) {
+       test = data.frame(from = name, to = as.numeric(node))
+       relations = rbind(relations, test)
+       vertices = c(vertices, as.numeric(node))
+    }
 }
 
-node = as.list(data.frame())
-for(row in 1:nrow(relations)) {
-    for(col in 1:ncol(relations)) {
-	    node = c(node, relations[row, col])
-	}
+vertices = unique(vertices)
+relations = c(unique(relations))
+
+#get path in circles
+crealtions = data.frame() 
+for (circle in circles){
+  c = scan(circle)
+  if (!inherits(c, 'try-error')) c
+  cList = as.list(c)
+  cname = gsub("/Users/leo/Desktop/big data/Project1/Circles/", "", circle)
+  cname = as.numeric(gsub(".circles", "", cname))
+  if (length(cList) != 0) {                              # skip the empty file, we already have all nodes in nameList
+    for (temp in cList){                                 # use this for loop to get edges of the node
+    	if (temp > 100) {
+    		test = data.frame(from = cname, to = temp)
+    		crelations = rbind(relations, test)
+    	}
+  	}
+  }
 }
-unique(node)
-#nameList[duplicated(nameList)] 
-users = data.frame(name = node)
-                   #Features = ,
-                   #FeatureNames = )
+crealtions = c(unique(crelations))
+relations = rbind(relations,crelations)
+relations = c(unique(relations))
 
-g = graph_from_data_frame(relations, directed = TRUE, vertices = users)
-is.simple(g)                                               # check duplicate
-g = simplify(g)
-plot(g, vertex.size = 4, vertex.label = NA, layout=layout.auto, edge.color = grey(0.5), edge.arrow.mode = "-")
+gg = graph_from_data_frame(relations, directed = TRUE)
+is.simple(gg)                                               # check duplicate
+gg = simplify(gg)
 
-########################################
+V(gg)$vertex_degree <-  degree(gg)
 
-com = walktrap.community(gg, steps = 5)
-subgroup = split(com$labels, com$membership)
-## subgroup
-V(gg)$sg = com$membership + 1
-V(gg)$color = rainbow(max(V(gg)$sg))[V(gg)$sg]
-## png("net_walktrap.png", width = 500, height = 500)
-plot(gg, layout = layout.auto, vertex.size = 4,
-    vertex.color = V(gg)$color, vertex.label = NA, edge.color = grey(0.5),
+plot(gg,layout = layout.auto, vertex.size = V(gg)$vertex_degree, 
+	vertex.label = NA, edge.color = grey(0.5),
     edge.arrow.mode = "-")
+
+#get 25 ego nodes with the largest circles
+res = data.frame() 
+for (circle in circles){
+  c = scan(circle)
+  if (!inherits(c, 'try-error')) c
+  clist = as.list(c)
+  circleSeq = scan(circle, what='list', flush = TRUE)
+  cname = gsub("/Users/leo/Desktop/big data/Project1/Circles/", "", circle)
+  cname = as.numeric(gsub(".circles", "", cname))
+  if (length(clist) != 0){
+  	max = 0
+    for (index in 1 : length(clist)){
+      if (index == 0) {
+      	i = 1
+      }else if (clist[index] < 100 && index != 0){
+      	if (index - i - 1 > max) {
+      		max = index - i - 1;
+      	}
+      	i = index
+      }else if (index == length(clist)) {
+      	if (length(clist) - i > max){
+      		max = length(clist) - i
+      	}
+      }
+    }
+    temp = data.frame(Node = cname, amount = max)
+    res = rbind(res, temp)
+    }
+}
+res = res[order(res$amount, decreasing = T),]
+
+
+
+#matrix of node and feature
+featpath = "/Users/leo/Desktop/big data/Project1/Features/134943586.feat"
+featNamePath = "/Users/leo/Desktop/big data/Project1/FeatureNames/134943586.featnames"
+feat = read.table(featpath, stringsAsFactors = F)    
+featureName = read.table(featNamePath, stringsAsFactors = F, comment.char = '~', fill = TRUE)
+for(row in 1:nrow(feat)) {
+	for(col in 1:ncol(feat)) {
+		if (col == 1) {
+        #first column here is the sub node
+        test = data.frame(from = name, to = feat[row, col])
+        relations = rbind(relations, test)
+        vertices = c(vertices, as.numeric(feat[row, col]))
+        }else {
+        	if (feat[row, col] == 0){
+
+        	}else {
+        	#somedatastructure.add featureName[col][2]
+            }
+        }
+    }
+}
