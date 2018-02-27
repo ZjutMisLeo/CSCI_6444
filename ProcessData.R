@@ -3,12 +3,28 @@ filePath = "/Users/leo/Desktop/big data/Project1/Features"
 circlePath = "/Users/leo/Desktop/big data/Project1/Circles"
 files = list.files(path = filePath, full.names = T, recursive = T)
 circles = list.files(path = circlePath, full.names = T, recursive = T)
-#create a datafram to store edges
+
+#create a datafram to store direct edges
 relations = data.frame() 
-#ccreate a list to store name of each file                           
+#create a list to store name of each file                           
 nameList = as.list(data.frame())          
+#create a list to store circle node of all files     
 vertices = as.list(data.frame())  
 
+#get path by edges
+edgePath = "/Users/leo/Desktop/big data/Project1/Edges"
+edges = list.files(path = edgePath, full.names = T, recursive = T)
+for (edge in edges){
+	#get the first column of node
+    edgeMatrix = as.matrix(read.table(edge))
+    for (row in 1 : nrow(edgeMatrix)) {
+    	test = data.frame(from = edgeMatrix[row, 1], to = edgeMatrix[row, 2])
+    	print(test)
+    	relations = rbind(relations, test)
+    }
+}
+
+#get path by feats
 for (path in files){
 	#get the first column of node
     subNode = as.list(scan(path, what = 'list', flush = T))
@@ -25,8 +41,8 @@ for (path in files){
 vertices = unique(vertices)
 relations = c(unique(relations))
 
-#get path in circles
-crealtions = data.frame() 
+#get path by circles
+crelations = data.frame() 
 for (circle in circles){
   c = scan(circle)
   if (!inherits(c, 'try-error')) c
@@ -37,27 +53,116 @@ for (circle in circles){
     for (temp in cList){                                 # use this for loop to get edges of the node
     	if (temp > 100) {
     		test = data.frame(from = cname, to = temp)
-    		crelations = rbind(relations, test)
+    		crelations = rbind(crelations, test)
     	}
   	}
   }
 }
-crealtions = c(unique(crelations))
+
+#to check if paths are same by these two ways
+crelations = c(unique(crelations))
 relations = rbind(relations,crelations)
 relations = c(unique(relations))
 
+#create graph
 gg = graph_from_data_frame(relations, directed = TRUE)
 is.simple(gg)                                               # check duplicate
 gg = simplify(gg)
 
-V(gg)$vertex_degree <-  degree(gg)
+print(gsize(gg)) #get number of edges for this graph
 
-plot(gg,layout = layout.auto, vertex.size = V(gg)$vertex_degree, 
-	vertex.label = NA, edge.color = grey(0.5),
+V(gg)$vertex_degree <-  degree(gg) # u can set vertex size base on degree by this way
+
+plot(gg,layout = layout.auto, vertex.size = 4, vertex.label = NA, edge.color = grey(0.5),
     edge.arrow.mode = "-")
 
-#get 25 ego nodes with the largest circles
-res = data.frame() 
+#get 25 ego nodes with the largest circles,here we consider the node has largest circle is the node with biggest degree
+sort(degree(gg), decreasing = T)
+
+#matrix of 25 nodes and feature
+library(plyr)
+library(reshape2)
+egopath = "/Users/leo/Desktop/big data/Project1/EgoFeatures"
+egos = list.files(path = egopath, full.names = T, recursive = T)
+list = as.list(data.frame())
+g = data.frame()
+for (path in egos){
+    feat = as.matrix(read.table(path, stringsAsFactors = F, fill = T))  
+    egoName = gsub("/Users/leo/Desktop/big data/Project1/EgoFeatures/", "", path)
+    egoName = as.numeric(gsub(".egofeat", "", egoName))
+    list = c(list, egoName)
+    featNamePath = paste("/Users/leo/Desktop/big data/Project1/FeatureNames/", egoName, ".featnames", sep = "")
+    featureName = as.matrix(read.table(featNamePath, stringsAsFactors = F, comment.char = '~', fill = TRUE))
+    fList = as.list(data.frame())
+    for(row in 1 : nrow(feat)) {
+	    for(col in 1 : ncol(feat)) {
+		    if (feat[row, col] == 1){
+			    fList = c(fList, featureName[col, 2])
+		    }
+	    }
+	}
+	if(length(fList) == 0) fList = c(fList, NA)#necessary
+	temp = data.frame(egoName, fList)
+	g = rbind.fill(g, temp)
+}
+
+# show each featurename contains which node
+featNameList = as.list(data.frame())
+g = as.matrix(g)
+gg = data.frame()
+for(val in g) {
+	featNameList = c(featNameList, g)
+}
+#remove duplicate elements
+featNameList = unique(featNameList)
+#remove NA
+featNameList[!is.na(featNameList)]
+for (index in featNameList) {
+	nodeList = as.list(data.frame())
+	for (row in 1 : nrow(g)) {
+		check = FALSE
+		for (col in 1 : ncol(g)) {
+			if (g[row, col] == index) {
+				nodeList = c(nodeList, g[row][1])
+				check = TRUE
+				break
+			}
+		}
+		if (check == FALSE){
+			nodeList = c(nodeList, NA)
+		}
+    }
+    temp = data.frame(index, nodeList)
+    gg = cbind.fill(gg, temp)
+}
+
+
+#central person
+central_person = alpha.centrality(gg)
+cp = tail(sort(central_person), 5)
+print(as.list(cp))
+
+#longest path
+longest_path = get_diameter(gg)
+
+#largest clique
+largest_cliques = largest_cliques(gg)
+print(largest_cliques)
+
+
+# ego
+ego = ego(gg, gorder(gg), V(gg))
+print(ego)
+
+
+# betweenness and power
+betweenness = betweenness(gg)
+print(betweenness)
+power = power_centrality(gg)
+print(power)
+
+
+#get the node with original large circle
 for (circle in circles){
   c = scan(circle)
   if (!inherits(c, 'try-error')) c
@@ -86,27 +191,3 @@ for (circle in circles){
     }
 }
 res = res[order(res$amount, decreasing = T),]
-
-
-
-#matrix of node and feature
-featpath = "/Users/leo/Desktop/big data/Project1/Features/134943586.feat"
-featNamePath = "/Users/leo/Desktop/big data/Project1/FeatureNames/134943586.featnames"
-feat = read.table(featpath, stringsAsFactors = F)    
-featureName = read.table(featNamePath, stringsAsFactors = F, comment.char = '~', fill = TRUE)
-for(row in 1:nrow(feat)) {
-	for(col in 1:ncol(feat)) {
-		if (col == 1) {
-        #first column here is the sub node
-        test = data.frame(from = name, to = feat[row, col])
-        relations = rbind(relations, test)
-        vertices = c(vertices, as.numeric(feat[row, col]))
-        }else {
-        	if (feat[row, col] == 0){
-
-        	}else {
-        	#somedatastructure.add featureName[col][2]
-            }
-        }
-    }
-}
